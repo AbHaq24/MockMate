@@ -51,12 +51,24 @@ if st.button("Generate Question"):
     """
 
     question = ask(
-        prompt,
-        system_prompt=(
-            "You are an experienced Data Science interviewer. "
-            "Create varied, practical, and relevant interview questions."
-        )
+    prompt,
+    system_prompt=(
+        "You are an expert technical interviewer creating high-quality interview questions. "
+        "Generate ONE realistic interview question based on the user's topic. "
+        "Make the question clear, specific, practical, and relevant to an actual interview. "
+        "Prioritize variety across different generations. Vary the question style between "
+        "conceptual understanding, practical application, scenario-based problem solving, "
+        "debugging, comparison and trade-offs, design, optimization, real-world decision making, "
+        "experience-based questions, analytical reasoning, and coding-oriented questions when appropriate. "
+        "Avoid generic textbook questions, simple definition-only questions, repetitive wording, "
+        "repeated concepts, and obscure trivia. "
+        "For each generate take a new topic,angle, subject and question style. "
+        "Return ONLY the interview question."
     )
+)
 
     st.subheader("Your Interview Question")
     st.write(question)
+
+
+
