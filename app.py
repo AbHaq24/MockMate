@@ -1,43 +1,15 @@
-import os
 import streamlit as st
-from openai import OpenAI
-from dotenv import load_dotenv
-
-load_dotenv()
-
-
-# -----------------------------
-# Groq configuration
-# -----------------------------
-client = OpenAI(
-    api_key=os.getenv("GROQ_API_KEY"),
-    base_url="https://api.groq.com/openai/v1"
-)
-
-MODEL_ID = "openai/gpt-oss-120b"
-
-
-# -----------------------------
-# Reusable LLM function
-# -----------------------------
-def ask(prompt, system_prompt="You are a helpful AI assistant."):
-    response = client.chat.completions.create(
-        model=MODEL_ID,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt}
-        ]
-    )
-
-    return response.choices[0].message.content
+from backend.llm import ask
+from backend.prompts import question_system_prompt, question_user_prompt
 
 
 # -----------------------------
 # Page configuration
 # -----------------------------
+
 st.set_page_config(
     page_title="MockMate",
-    page_icon="🎯",
+    page_icon="",
     layout="centered"
 )
 
@@ -45,6 +17,7 @@ st.set_page_config(
 # -----------------------------
 # Custom CSS
 # -----------------------------
+
 st.markdown(
     """
     <style>
@@ -120,51 +93,70 @@ st.markdown(
 
 
     /* =========================
-       Subject section
+       Section headings
        ========================= */
 
-    .subject-heading {
+    .subject-heading,
+    .difficulty-heading {
         text-align: center;
         color: #77736d;
         font-size: 14px;
-        margin-top: 24px;
+        font-weight: 600;
         margin-bottom: 15px;
+    }
+
+    .subject-heading {
+        margin-top: 24px;
+    }
+
+    .difficulty-heading {
+        margin-top: 28px;
     }
 
 
     /* =========================
-       Subject buttons
+       All selection buttons
        ========================= */
 
-    .subject-button button {
-        width: 70px !important;
-        height: 70px !important;
-        min-width: 70px !important;
-        min-height: 70px !important;
-
-        padding: 0 !important;
-
-        border-radius: 50% !important;
-
-        background-color: #ffffff !important;
-        border: 1px solid #dedbd4 !important;
-
-        color: #333333 !important;
-
-        font-size: 12px !important;
+    div[data-testid="stButton"] button {
+        border-radius: 12px !important;
+        height: 50px !important;
+        font-size: 13px !important;
         font-weight: 600 !important;
-
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-
-        margin: 0 auto !important;
     }
 
-    .subject-button button:hover {
+
+    /* =========================
+       Unselected buttons
+       ========================= */
+
+    div[data-testid="stButton"] button[kind="secondary"] {
+        background-color: #ffffff !important;
+        border: 1px solid #dedbd4 !important;
+        color: #333333 !important;
+    }
+
+    div[data-testid="stButton"] button[kind="secondary"]:hover {
         background-color: #f0eee9 !important;
         border-color: #77736d !important;
         color: #111111 !important;
+    }
+
+
+    /* =========================
+       Selected buttons
+       ========================= */
+
+    div[data-testid="stButton"] button[kind="primary"] {
+        background-color: #5f6f52 !important;
+        border: 1px solid #5f6f52 !important;
+        color: #ffffff !important;
+    }
+
+    div[data-testid="stButton"] button[kind="primary"]:hover {
+        background-color: #5f6f52 !important;
+        border-color: #5f6f52 !important;
+        color: #ffffff !important;
     }
 
 
@@ -175,17 +167,12 @@ st.markdown(
     .generate-button button {
         width: 100% !important;
         height: 50px !important;
-
         border-radius: 12px !important;
-
         background-color: #5f6f52 !important;
         color: #ffffff !important;
-
         border: none !important;
-
         font-size: 16px !important;
         font-weight: 600 !important;
-
         margin-top: 25px !important;
     }
 
@@ -248,6 +235,12 @@ st.markdown(
 if "topic" not in st.session_state:
     st.session_state.topic = ""
 
+if "difficulty" not in st.session_state:
+    st.session_state.difficulty = "Medium"
+
+if "selected_subject" not in st.session_state:
+    st.session_state.selected_subject = ""
+
 
 # -----------------------------
 # Topic input
@@ -273,7 +266,7 @@ st.session_state.topic = topic
 # -----------------------------
 
 st.markdown(
-    '<div class="subject-heading">or pick a subject</div>',
+    '<div class="subject-heading">Select a subject</div>',
     unsafe_allow_html=True
 )
 
@@ -281,55 +274,124 @@ col1, col2, col3, col4 = st.columns(4)
 
 
 with col1:
-    st.markdown(
-        '<div class="subject-button">',
-        unsafe_allow_html=True
-    )
-
-    if st.button("ML"):
+    if st.button(
+        "ML",
+        key="ml_button",
+        type=(
+            "primary"
+            if st.session_state.selected_subject == "Machine Learning"
+            else "secondary"
+        ),
+        use_container_width=True
+    ):
         st.session_state.topic = "Machine Learning"
+        st.session_state.selected_subject = "Machine Learning"
         st.rerun()
-
-    st.markdown("</div>", unsafe_allow_html=True)
 
 
 with col2:
-    st.markdown(
-        '<div class="subject-button">',
-        unsafe_allow_html=True
-    )
-
-    if st.button("SQL"):
+    if st.button(
+        "SQL",
+        key="sql_button",
+        type=(
+            "primary"
+            if st.session_state.selected_subject == "SQL"
+            else "secondary"
+        ),
+        use_container_width=True
+    ):
         st.session_state.topic = "SQL"
+        st.session_state.selected_subject = "SQL"
         st.rerun()
-
-    st.markdown("</div>", unsafe_allow_html=True)
 
 
 with col3:
-    st.markdown(
-        '<div class="subject-button">',
-        unsafe_allow_html=True
-    )
-
-    if st.button("Python"):
+    if st.button(
+        "Python",
+        key="python_button",
+        type=(
+            "primary"
+            if st.session_state.selected_subject == "Python"
+            else "secondary"
+        ),
+        use_container_width=True
+    ):
         st.session_state.topic = "Python"
+        st.session_state.selected_subject = "Python"
         st.rerun()
-
-    st.markdown("</div>", unsafe_allow_html=True)
 
 
 with col4:
-    st.markdown(
-        '<div class="subject-button">',
-        unsafe_allow_html=True
-    )
-
-    if st.button("GenAI"):
+    if st.button(
+        "GenAI",
+        key="genai_button",
+        type=(
+            "primary"
+            if st.session_state.selected_subject == "Generative AI"
+            else "secondary"
+        ),
+        use_container_width=True
+    ):
         st.session_state.topic = "Generative AI"
+        st.session_state.selected_subject = "Generative AI"
         st.rerun()
 
-    st.markdown("</div>", unsafe_allow_html=True)
+
+# -----------------------------
+# Difficulty
+# -----------------------------
+
+st.markdown(
+    '<div class="difficulty-heading">Select difficulty level</div>',
+    unsafe_allow_html=True
+)
+
+diff1, diff2, diff3 = st.columns(3)
+
+
+with diff1:
+    if st.button(
+        "Easy",
+        key="easy_button",
+        type=(
+            "primary"
+            if st.session_state.difficulty == "Easy"
+            else "secondary"
+        ),
+        use_container_width=True
+    ):
+        st.session_state.difficulty = "Easy"
+        st.rerun()
+
+
+with diff2:
+    if st.button(
+        "Medium",
+        key="medium_button",
+        type=(
+            "primary"
+            if st.session_state.difficulty == "Medium"
+            else "secondary"
+        ),
+        use_container_width=True
+    ):
+        st.session_state.difficulty = "Medium"
+        st.rerun()
+
+
+with diff3:
+    if st.button(
+        "Hard",
+        key="hard_button",
+        type=(
+            "primary"
+            if st.session_state.difficulty == "Hard"
+            else "secondary"
+        ),
+        use_container_width=True
+    ):
+        st.session_state.difficulty = "Hard"
+        st.rerun()
 
 
 # -----------------------------
@@ -358,50 +420,24 @@ st.markdown(
 
 if generate:
 
-    prompt = f"""
-    Generate ONE realistic Data Science interview question.
+    topic = (
+        st.session_state.topic
+        if st.session_state.topic
+        else "Choose a random Data Science topic."
+    )
 
-    Topic:
-    {st.session_state.topic
-     if st.session_state.topic
-     else "Choose a random Data Science topic."}
-
-    Return ONE interview question as a single clean paragraph.
-
-    Do not use bullet points.
-    Do not use numbered lists.
-    Do not add headings.
-    Do not provide the answer.
-    Do not add quotation marks.
-    """
+    prompt = question_user_prompt(
+        topic,
+        st.session_state.difficulty
+    )
 
     question = ask(
         prompt,
-        system_prompt=(
-            "You are an expert technical interviewer creating high-quality "
-            "interview questions. "
-
-            "Generate ONE realistic interview question based on the user's topic. "
-
-            "Make the question clear, specific, practical, and relevant to an "
-            "actual interview. "
-
-            "Prioritize variety across different generations. "
-
-            "Vary the question style between conceptual understanding, "
-            "practical application, scenario-based problem solving, debugging, "
-            "comparison and trade-offs, design, optimization, real-world "
-            "decision making, experience-based questions, analytical reasoning, "
-            "and coding-oriented questions when appropriate. "
-
-            "Avoid generic textbook questions, simple definition-only questions, "
-            "repetitive wording, repeated concepts, and obscure trivia. "
-
-            "For each generation take a new topic, angle, subject, and question style. "
-
-            "Return ONLY the interview question as one clean paragraph."
-        )
+        system_prompt=question_system_prompt()
     )
+
+    st.session_state.question = question
+
 
     # -----------------------------
     # Display generated question
@@ -422,4 +458,3 @@ if generate:
             f'</div>',
             unsafe_allow_html=True
         )
-
