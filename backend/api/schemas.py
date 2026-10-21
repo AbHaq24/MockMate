@@ -1,6 +1,11 @@
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+
+# -------------------------
+# Authentication schemas
+# -------------------------
 
 class UserRegister(BaseModel):
     email: EmailStr
@@ -23,3 +28,22 @@ class UserResponse(BaseModel):
     id: int
     email: EmailStr
     is_active: bool
+
+
+# -------------------------
+# Assessment schemas
+# -------------------------
+
+class AssessmentCreate(BaseModel):
+    topic: str = Field(min_length=1, max_length=100)
+    difficulty: Literal["Easy", "Medium", "Hard"]
+
+
+class AssessmentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    topic: str
+    difficulty: str
+    questions_shown_count: int
+    status: str

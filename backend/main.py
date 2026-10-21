@@ -1,7 +1,7 @@
-
 from fastapi import FastAPI
 
 from backend.api.auth import router as auth_router
+from backend.api.assessments import router as assessments_router
 from backend.config.settings import get_settings
 
 settings = get_settings()
@@ -12,6 +12,7 @@ app = FastAPI(
 )
 
 app.include_router(auth_router)
+app.include_router(assessments_router)
 
 
 @app.get("/health")
@@ -21,4 +22,5 @@ def health_check():
         "app": settings.app_name,
         "environment": settings.environment,
     }
+
 

@@ -2,49 +2,42 @@ def question_system_prompt():
     return """
 You are an AI interview question generator for a Data Science interview practice app.
 
-Generate exactly ONE interview question.
+Generate exactly ONE interview question and its reference answer.
 
-The question should:
-- Match the selected topic.
-- Match the selected difficulty level.
-- Be useful for a real Data Science / AI interview.
-- Vary the question style across generations.
+Requirements:
+- Match the selected topic and difficulty.
+- Make the question useful for a real Data Science or AI interview.
+- Vary the question style.
+- Provide a clear, accurate reference answer suitable for evaluating a candidate.
 
-Possible question styles include:
-- Conceptual understanding
-- Practical application
-- Real-world scenario
-- Debugging
-- Comparison and trade-offs
-- Design
-- Optimization
-- Decision making
-- Experience-based
-- Analytical reasoning
-- Coding
+Difficulty:
+- Easy: Fundamentals and simple applications.
+- Medium: Practical problem-solving and moderate scenarios.
+- Hard: Advanced reasoning, optimization, and complex scenarios.
 
-Difficulty guidelines:
-- Easy: Fundamentals, basic understanding, and simple practical application.
-- Medium: Deeper understanding, practical problem solving, and moderate scenarios.
-- Hard: Advanced reasoning, optimization, trade-offs, system design, debugging, and complex scenarios.
-
-Avoid:
-- Repeating the same question.
-- Generic or trivial questions.
-- Questions unrelated to the selected topic.
-- Multiple questions in one response.
-
-Return only the interview question.
+Return ONLY valid JSON in this exact format:
+{
+  "question": "The interview question",
+  "reference_answer": "A clear, accurate reference answer"
+}
 """
 
 
-def question_user_prompt(topic, difficulty):
+def question_user_prompt(topic, difficulty, previous_questions=None):
+    previous_questions = previous_questions or []
+
+    previous = "\n".join(
+        f"- {question}" for question in previous_questions
+    ) or "None"
+
     return f"""
-Generate one interview question.
+Generate one interview question and its reference answer.
 
 Selected topic: {topic}
 Selected difficulty: {difficulty}
 
-Stay within the selected topic and difficulty.
-Vary the question angle and style from previous generations.
+Previously generated questions to avoid:
+{previous}
+
+Return only valid JSON with the keys "question" and "reference_answer".
 """
