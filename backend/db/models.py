@@ -106,20 +106,28 @@ class Question(Base):
     )
 
 
+
 class AssessmentQuestion(Base):
     __tablename__ = "assessment_questions"
     __table_args__ = (
         UniqueConstraint(
-            "assessment_id", "display_number",
-            name="uq_assessment_questions_display_number",
+            "assessment_id",
+            "display_number",
+            "version_number",
+            name="uq_assessment_question_slot_version",
         ),
         UniqueConstraint(
-            "assessment_id", "question_id",
+            "assessment_id",
+            "question_id",
             name="uq_assessment_questions_question",
         ),
         CheckConstraint(
             "display_number BETWEEN 1 AND 3",
             name="ck_assessment_questions_display_number",
+        ),
+        CheckConstraint(
+            "version_number BETWEEN 1 AND 3",
+            name="ck_assessment_question_version_number",
         ),
     )
 
@@ -131,6 +139,12 @@ class AssessmentQuestion(Base):
         ForeignKey("questions.id", ondelete="RESTRICT"), index=True
     )
     display_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    version_number: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
+    is_current: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
     displayed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -146,6 +160,7 @@ class AssessmentQuestion(Base):
         cascade="all, delete-orphan",
         uselist=False,
     )
+
 
 
 class Answer(Base):

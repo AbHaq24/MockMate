@@ -74,3 +74,50 @@ def generate_question(topic, difficulty, previous_questions=None):
         "question": question.strip(),
         "reference_answer": reference_answer.strip(),
     }
+
+
+
+def evaluate_answer(topic, difficulty, question, reference_answer, answer):
+    from backend.prompts import (
+        evaluation_system_prompt,
+        evaluation_user_prompt,
+    )
+
+    raw_response = ask(
+        evaluation_user_prompt(
+            topic,
+            difficulty,
+            question,
+            reference_answer,
+            answer,
+        ),
+        system_prompt=evaluation_system_prompt(),
+    )
+
+    try:
+        result = json.loads(raw_response)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            "The AI returned an invalid evaluation format."
+        ) from exc
+
+    score = result.get("score")
+    if (
+        not isinstance(score, int)
+        or isinstance(score, bool)
+        or not 0 <= score <= 100
+    ):
+        raise RuntimeError("The AI returned an invalid evaluation score.")
+
+    for field in ("feedback", "strengths", "improvements"):
+        if not isinstance(result.get(field), str) or not result[field].strip():
+            raise RuntimeError(
+                f"The AI returned an invalid {field} field."
+            )
+
+    return {
+        "score": score,
+        "feedback": result["feedback"].strip(),
+        "strengths": result["strengths"].strip(),
+        "improvements": result["improvements"].strip(),
+    }

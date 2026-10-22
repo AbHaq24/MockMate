@@ -47,3 +47,16 @@ class AssessmentResponse(BaseModel):
     difficulty: str
     questions_shown_count: int
     status: str
+
+
+class AnswerSubmit(BaseModel):
+    answer_text: str = Field(min_length=1, max_length=10000)
+
+
+class EvaluationResponse(BaseModel):
+    answer_id: int
+    assessment_question_id: int
+    score: int = Field(ge=0, le=100)
+    feedback: str
+    strengths: str
+    improvements: str
