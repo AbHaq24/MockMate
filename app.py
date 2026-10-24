@@ -1,460 +1,567 @@
+
+import os
+
+import httpx
 import streamlit as st
-from backend.llm import ask
-from backend.prompts import question_system_prompt, question_user_prompt
 
 
-# -----------------------------
-# Page configuration
-# -----------------------------
+# --------------------------------------------------
+# Configuration
+# --------------------------------------------------
+
+API_URL = os.getenv(
+    "MOCKMATE_API_URL",
+    "http://127.0.0.1:8000",
+).rstrip("/")
+
+REQUEST_TIMEOUT = 90.0
 
 st.set_page_config(
     page_title="MockMate",
-    page_icon="",
-    layout="centered"
+    page_icon="🎯",
+    layout="centered",
 )
 
 
-# -----------------------------
-# Custom CSS
-# -----------------------------
+# --------------------------------------------------
+
+
+# Styling
+# --------------------------------------------------
 
 st.markdown(
     """
     <style>
-
-    /* =========================
-       Overall page
-       ========================= */
-
     .stApp {
         background-color: #f7f5f0;
     }
 
     .block-container {
-        max-width: 720px;
-        padding-top: 65px;
-        padding-bottom: 60px;
+        max-width: 760px;
+        padding-top: 35px;
+        padding-bottom: 50px;
     }
-
-    #MainMenu {
-        visibility: hidden;
-    }
-
-    footer {
-        visibility: hidden;
-    }
-
-
-    /* =========================
-       Header
-       ========================= */
 
     .mockmate-title {
         text-align: center;
-        font-size: 48px;
+        font-size: 44px;
         font-weight: 700;
-        letter-spacing: -1px;
-        margin-bottom: 4px;
         color: #222222;
     }
 
     .mockmate-tagline {
         text-align: center;
-        font-size: 17px;
-        color: #77736d;
-        margin-bottom: 42px;
-    }
-
-
-    /* =========================
-       Topic input
-       ========================= */
-
-    .topic-label {
-        font-size: 15px;
-        font-weight: 600;
-        color: #333333;
-        margin-bottom: 8px;
-    }
-
-    .stTextInput input {
-        background-color: #ffffff;
-        border: 1px solid #dedbd4;
-        border-radius: 12px;
-        padding: 14px;
-        font-size: 15px;
-        color: #222222;
-    }
-
-    .stTextInput input:focus {
-        border-color: #aaa49a;
-        box-shadow: none;
-    }
-
-
-    /* =========================
-       Section headings
-       ========================= */
-
-    .subject-heading,
-    .difficulty-heading {
-        text-align: center;
-        color: #77736d;
-        font-size: 14px;
-        font-weight: 600;
-        margin-bottom: 15px;
-    }
-
-    .subject-heading {
-        margin-top: 24px;
-    }
-
-    .difficulty-heading {
-        margin-top: 28px;
-    }
-
-
-    /* =========================
-       All selection buttons
-       ========================= */
-
-    div[data-testid="stButton"] button {
-        border-radius: 12px !important;
-        height: 50px !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-    }
-
-
-    /* =========================
-       Unselected buttons
-       ========================= */
-
-    div[data-testid="stButton"] button[kind="secondary"] {
-        background-color: #ffffff !important;
-        border: 1px solid #dedbd4 !important;
-        color: #333333 !important;
-    }
-
-    div[data-testid="stButton"] button[kind="secondary"]:hover {
-        background-color: #f0eee9 !important;
-        border-color: #77736d !important;
-        color: #111111 !important;
-    }
-
-
-    /* =========================
-       Selected buttons
-       ========================= */
-
-    div[data-testid="stButton"] button[kind="primary"] {
-        background-color: #5f6f52 !important;
-        border: 1px solid #5f6f52 !important;
-        color: #ffffff !important;
-    }
-
-    div[data-testid="stButton"] button[kind="primary"]:hover {
-        background-color: #5f6f52 !important;
-        border-color: #5f6f52 !important;
-        color: #ffffff !important;
-    }
-
-
-    /* =========================
-       Generate button
-       ========================= */
-
-    .generate-button button {
-        width: 100% !important;
-        height: 50px !important;
-        border-radius: 12px !important;
-        background-color: #5f6f52 !important;
-        color: #ffffff !important;
-        border: none !important;
-        font-size: 16px !important;
-        font-weight: 600 !important;
-        margin-top: 25px !important;
-    }
-
-    .generate-button button:hover {
-        background-color: #4f5f45 !important;
-        color: #ffffff !important;
-    }
-
-
-    /* =========================
-       Question container
-       ========================= */
-
-    [data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: #ffffff;
-        border-radius: 16px;
-        margin-top: 32px;
-    }
-
-    .question-label {
-        color: #77736d !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        text-transform: uppercase;
-        letter-spacing: 0.8px;
-        margin-bottom: 15px;
-    }
-
-    .question-text {
         color: #222222 !important;
-        font-size: 19px !important;
-        line-height: 1.7 !important;
+        margin-bottom: 30px;
     }
 
+    /* Keep form labels readable */
+    [data-testid="stWidgetLabel"] p,
+    [data-testid="stWidgetLabel"] label,
+    [data-testid="stWidgetLabel"] span {
+        color: #222222 !important;
+        -webkit-text-fill-color: #222222 !important;
+        opacity: 1 !important;
+    }
+
+    /* Buttons */
+    div[data-testid="stButton"] button {
+        border-radius: 10px;
+        min-height: 42px;
+    }
+
+    /* Card styling */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background-color: #ffffff;
+        border-radius: 14px;
+    }
+
+    /* Keep Login and Create account visible */
+    div[role="radiogroup"] label,
+    div[role="radiogroup"] label p,
+    div[role="radiogroup"] label span {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+     opacity: 1 !important;
+}
     </style>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
-
-
-# -----------------------------
-# Header
-# -----------------------------
 
 st.markdown(
     '<div class="mockmate-title">MockMate</div>',
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 st.markdown(
-    '<div class="mockmate-tagline">Practice. Think. Improve.</div>',
-    unsafe_allow_html=True
+    '<div class="mockmate-tagline">'
+    'Practice. Think. Improve.'
+    '</div>',
+    unsafe_allow_html=True,
 )
 
 
-# -----------------------------
 # Session state
-# -----------------------------
+# --------------------------------------------------
 
-if "topic" not in st.session_state:
-    st.session_state.topic = ""
+DEFAULTS = {
+    "token": None,
+    "email": "",
+    "topic": "Machine Learning",
+    "difficulty": "Medium",
+    "assessment_id": None,
+    "assessment_status": None,
+    "questions_shown_count": 0,
+    "current_question": None,
+    "evaluation": None,
+    "finish_message": None,
+}
 
-if "difficulty" not in st.session_state:
-    st.session_state.difficulty = "Medium"
-
-if "selected_subject" not in st.session_state:
-    st.session_state.selected_subject = ""
-
-
-# -----------------------------
-# Topic input
-# -----------------------------
-
-st.markdown(
-    '<div class="topic-label">What do you want to practice?</div>',
-    unsafe_allow_html=True
-)
-
-topic = st.text_input(
-    "",
-    value=st.session_state.topic,
-    placeholder="e.g. Machine Learning, SQL, GenAI...",
-    label_visibility="collapsed"
-)
-
-st.session_state.topic = topic
+for key, value in DEFAULTS.items():
+    if key not in st.session_state:
+        st.session_state[key] = value
 
 
-# -----------------------------
-# Subject shortcuts
-# -----------------------------
+# --------------------------------------------------
+# API helper
+# --------------------------------------------------
 
-st.markdown(
-    '<div class="subject-heading">Select a subject</div>',
-    unsafe_allow_html=True
-)
+def api_request(method, path, payload=None):
+    headers = {}
 
-col1, col2, col3, col4 = st.columns(4)
+    if st.session_state.token:
+        headers["Authorization"] = (
+            f"Bearer {st.session_state.token}"
+        )
 
+    try:
+        response = httpx.request(
+            method,
+            f"{API_URL}{path}",
+            json=payload,
+            headers=headers,
+            timeout=REQUEST_TIMEOUT,
+        )
+    except httpx.RequestError as exc:
+        raise RuntimeError(
+            "Cannot connect to MockMate API. "
+            "Make sure the FastAPI server is running."
+        ) from exc
 
-with col1:
-    if st.button(
-        "ML",
-        key="ml_button",
-        type=(
-            "primary"
-            if st.session_state.selected_subject == "Machine Learning"
-            else "secondary"
-        ),
-        use_container_width=True
-    ):
-        st.session_state.topic = "Machine Learning"
-        st.session_state.selected_subject = "Machine Learning"
-        st.rerun()
+    try:
+        data = response.json()
+    except ValueError:
+        data = {}
 
+    if not response.is_success:
+        detail = data.get("detail", response.text)
 
-with col2:
-    if st.button(
-        "SQL",
-        key="sql_button",
-        type=(
-            "primary"
-            if st.session_state.selected_subject == "SQL"
-            else "secondary"
-        ),
-        use_container_width=True
-    ):
-        st.session_state.topic = "SQL"
-        st.session_state.selected_subject = "SQL"
-        st.rerun()
+        if isinstance(detail, list):
+            detail = "; ".join(
+                str(item.get("msg", item))
+                if isinstance(item, dict)
+                else str(item)
+                for item in detail
+            )
 
+        raise RuntimeError(
+            f"API error ({response.status_code}): {detail}"
+        )
 
-with col3:
-    if st.button(
-        "Python",
-        key="python_button",
-        type=(
-            "primary"
-            if st.session_state.selected_subject == "Python"
-            else "secondary"
-        ),
-        use_container_width=True
-    ):
-        st.session_state.topic = "Python"
-        st.session_state.selected_subject = "Python"
-        st.rerun()
+    return data
 
 
-with col4:
-    if st.button(
-        "GenAI",
-        key="genai_button",
-        type=(
-            "primary"
-            if st.session_state.selected_subject == "Generative AI"
-            else "secondary"
-        ),
-        use_container_width=True
-    ):
-        st.session_state.topic = "Generative AI"
-        st.session_state.selected_subject = "Generative AI"
-        st.rerun()
+# --------------------------------------------------
+# Assessment helpers
+# --------------------------------------------------
 
+def generate_question():
+    assessment_id = st.session_state.assessment_id
 
-# -----------------------------
-# Difficulty
-# -----------------------------
-
-st.markdown(
-    '<div class="difficulty-heading">Select difficulty level</div>',
-    unsafe_allow_html=True
-)
-
-diff1, diff2, diff3 = st.columns(3)
-
-
-with diff1:
-    if st.button(
-        "Easy",
-        key="easy_button",
-        type=(
-            "primary"
-            if st.session_state.difficulty == "Easy"
-            else "secondary"
-        ),
-        use_container_width=True
-    ):
-        st.session_state.difficulty = "Easy"
-        st.rerun()
-
-
-with diff2:
-    if st.button(
-        "Medium",
-        key="medium_button",
-        type=(
-            "primary"
-            if st.session_state.difficulty == "Medium"
-            else "secondary"
-        ),
-        use_container_width=True
-    ):
-        st.session_state.difficulty = "Medium"
-        st.rerun()
-
-
-with diff3:
-    if st.button(
-        "Hard",
-        key="hard_button",
-        type=(
-            "primary"
-            if st.session_state.difficulty == "Hard"
-            else "secondary"
-        ),
-        use_container_width=True
-    ):
-        st.session_state.difficulty = "Hard"
-        st.rerun()
-
-
-# -----------------------------
-# Generate Question button
-# -----------------------------
-
-st.markdown(
-    '<div class="generate-button">',
-    unsafe_allow_html=True
-)
-
-generate = st.button(
-    "Generate Question",
-    use_container_width=True
-)
-
-st.markdown(
-    "</div>",
-    unsafe_allow_html=True
-)
-
-
-# -----------------------------
-# Generate question
-# -----------------------------
-
-if generate:
-
-    topic = (
-        st.session_state.topic
-        if st.session_state.topic
-        else "Choose a random Data Science topic."
+    question = api_request(
+        "POST",
+        f"/assessments/{assessment_id}/questions",
     )
 
-    prompt = question_user_prompt(
-        topic,
-        st.session_state.difficulty
+    st.session_state.current_question = question
+    st.session_state.questions_shown_count = (
+        question["display_number"]
     )
 
-    question = ask(
-        prompt,
-        system_prompt=question_system_prompt()
+
+def reset_assessment():
+    st.session_state.assessment_id = None
+    st.session_state.assessment_status = None
+    st.session_state.questions_shown_count = 0
+    st.session_state.current_question = None
+    st.session_state.evaluation = None
+    st.session_state.finish_message = None
+
+
+# --------------------------------------------------
+# Authentication
+# --------------------------------------------------
+
+if not st.session_state.token:
+    auth_mode = st.radio(
+        "Authentication",
+        ["Login", "Create account"],
+        horizontal=True,
+        label_visibility="visible",
+        key="auth_mode",
     )
 
-    st.session_state.question = question
+    if auth_mode == "Login":
+        with st.form("login_form"):
+            login_email = st.text_input("Email")
+            login_password = st.text_input(
+                "Password",
+                type="password",
+            )
+
+            login_clicked = st.form_submit_button(
+                "Login",
+                use_container_width=True,
+            )
+
+        if login_clicked:
+            try:
+                result = api_request(
+                    "POST",
+                    "/auth/login",
+                    {
+                        "email": login_email.strip(),
+                        "password": login_password,
+                    },
+                )
+
+                st.session_state.token = result["access_token"]
+                st.session_state.email = login_email.strip()
+                reset_assessment()
+                st.rerun()
+
+            except RuntimeError as exc:
+                st.error(str(exc))
+
+    else:
+        with st.form("register_form"):
+            register_email = st.text_input(
+                "Email address",
+                key="register_email",
+            )
+            register_password = st.text_input(
+                "Password (at least 8 characters)",
+                type="password",
+                key="register_password",
+            )
+            confirm_password = st.text_input(
+                "Confirm password",
+                type="password",
+            )
+
+            register_clicked = st.form_submit_button(
+                "Create account",
+                use_container_width=True,
+            )
+
+        if register_clicked:
+            if register_password != confirm_password:
+                st.error("The passwords do not match.")
+            elif len(register_password) < 8:
+                st.error("Password must contain at least 8 characters.")
+            else:
+                try:
+                    api_request(
+                        "POST",
+                        "/auth/register",
+                        {
+                            "email": register_email.strip(),
+                            "password": register_password,
+                        },
+                    )
+
+                    st.success("Account created. Please log in.")
+                    st.session_state.auth_mode = "Login"
+
+                except RuntimeError as exc:
+                    st.error(str(exc))
+
+    st.stop()
 
 
-    # -----------------------------
-    # Display generated question
-    # -----------------------------
+# Logged-in header
+# --------------------------------------------------
+
+st.caption(f"Logged in as {st.session_state.email}")
+
+if st.button("Logout"):
+    for key in DEFAULTS:
+        st.session_state[key] = DEFAULTS[key]
+    st.rerun()
+
+
+# --------------------------------------------------
+# Evaluation results
+# --------------------------------------------------
+
+if st.session_state.evaluation:
+    result = st.session_state.evaluation
+
+    st.success("Assessment completed!")
+
+    st.metric("Your score", f"{result['score']}/100")
+
+    st.subheader("Feedback")
+    st.write(result["feedback"])
+
+    st.subheader("Strengths")
+    st.write(result["strengths"])
+
+    st.subheader("Areas to improve")
+    st.write(result["improvements"])
+
+    if st.button(
+        "Start a new assessment",
+        use_container_width=True,
+    ):
+        reset_assessment()
+        st.rerun()
+
+    st.stop()
+
+
+# --------------------------------------------------
+# Completed without an answer
+# --------------------------------------------------
+
+if st.session_state.assessment_status == "completed":
+    st.info(
+        st.session_state.finish_message
+        or "Assessment completed without an evaluated answer."
+    )
+
+    if st.button(
+        "Start a new assessment",
+        use_container_width=True,
+    ):
+        reset_assessment()
+        st.rerun()
+
+    st.stop()
+
+
+# --------------------------------------------------
+# Start an assessment
+# --------------------------------------------------
+
+if st.session_state.assessment_id is None:
+    st.subheader("Prepare for your interview")
+
+    with st.form("assessment_form"):
+        topic = st.text_input(
+            "What do you want to practice?",
+            value=st.session_state.topic,
+            max_chars=100,
+            placeholder="e.g. Machine Learning, SQL, GenAI",
+        )
+
+        difficulty = st.selectbox(
+            "Difficulty",
+            ["Easy", "Medium", "Hard"],
+            index=["Easy", "Medium", "Hard"].index(
+                st.session_state.difficulty
+            ),
+        )
+
+        start_clicked = st.form_submit_button(
+            "Start assessment",
+            use_container_width=True,
+        )
+
+    if start_clicked:
+        if not topic.strip():
+            st.error("Please enter a topic.")
+        else:
+            try:
+                assessment = api_request(
+                    "POST",
+                    "/assessments",
+                    {
+                        "topic": topic.strip(),
+                        "difficulty": difficulty,
+                    },
+                )
+
+                st.session_state.topic = topic.strip()
+                st.session_state.difficulty = difficulty
+                st.session_state.assessment_id = assessment[
+                    "id"
+                ]
+                st.session_state.assessment_status = (
+                    assessment["status"]
+                )
+
+                with st.spinner("Generating your question..."):
+                    generate_question()
+
+                st.rerun()
+
+            except RuntimeError as exc:
+                st.error(str(exc))
+
+    st.stop()
+
+
+# --------------------------------------------------
+# Active assessment
+# --------------------------------------------------
+
+assessment_id = st.session_state.assessment_id
+current = st.session_state.current_question
+
+st.subheader(st.session_state.topic)
+
+st.caption(
+    f"Difficulty: {st.session_state.difficulty} · "
+    f"Questions generated: "
+    f"{st.session_state.questions_shown_count}/3"
+)
+
+st.progress(
+    st.session_state.questions_shown_count / 3
+)
+
+
+# --------------------------------------------------
+# Display current question and answer form
+# --------------------------------------------------
+
+if current:
+    st.markdown(
+        f"**Question {current['display_number']} of 3**"
+        f" · Version {current['version_number']}"
+    )
 
     with st.container(border=True):
+        st.markdown(current["question"])
 
-        st.markdown(
-            '<div class="question-label">'
-            'Your Interview Question'
-            '</div>',
-            unsafe_allow_html=True
+    answer_text = st.text_area(
+        "Your answer",
+        key=f"answer_{current['assessment_question_id']}",
+        height=180,
+        max_chars=10000,
+        placeholder="Explain your approach and reasoning...",
+    )
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        submit_clicked = st.button(
+            "Submit answer",
+            type="primary",
+            use_container_width=True,
         )
 
-        st.markdown(
-            f'<div class="question-text">'
-            f'{question}'
-            f'</div>',
-            unsafe_allow_html=True
+    with col2:
+        regenerate_clicked = st.button(
+            "Try another",
+            use_container_width=True,
         )
+
+    with col3:
+        skip_clicked = st.button(
+            "Skip question",
+            use_container_width=True,
+        )
+
+    if submit_clicked:
+        if not answer_text.strip():
+            st.warning("Please enter an answer first.")
+        else:
+            try:
+                with st.spinner("Evaluating your answer..."):
+                    result = api_request(
+                        "POST",
+                        f"/assessments/{assessment_id}/"
+                        f"questions/"
+                        f"{current['assessment_question_id']}/answer",
+                        {"answer_text": answer_text.strip()},
+                    )
+
+                st.session_state.evaluation = result
+                st.session_state.assessment_status = "completed"
+                st.rerun()
+
+            except RuntimeError as exc:
+                st.error(str(exc))
+
+    if regenerate_clicked:
+        try:
+            with st.spinner("Generating an alternative..."):
+                question = api_request(
+                    "POST",
+                    f"/assessments/{assessment_id}/"
+                    f"questions/"
+                    f"{current['display_number']}/regenerate",
+                )
+
+            st.session_state.current_question = question
+            st.rerun()
+
+        except RuntimeError as exc:
+            st.error(str(exc))
+
+    if skip_clicked:
+        st.session_state.current_question = None
+        st.rerun()
+
+
+# --------------------------------------------------
+# Generate next question or finish
+# --------------------------------------------------
+
+else:
+    count = st.session_state.questions_shown_count
+
+    if count < 3:
+        if st.button(
+            "Generate next question",
+            type="primary",
+            use_container_width=True,
+        ):
+            try:
+                with st.spinner("Generating your question..."):
+                    generate_question()
+                st.rerun()
+
+            except RuntimeError as exc:
+                st.error(str(exc))
+
+    else:
+        st.info(
+            "You have used all three question slots. "
+            "You can finish without submitting an answer."
+        )
+
+        if st.button(
+            "Finish assessment",
+            type="primary",
+            use_container_width=True,
+        ):
+            try:
+                result = api_request(
+                    "POST",
+                    f"/assessments/{assessment_id}/finish",
+                )
+
+                st.session_state.assessment_status = (
+                    result["status"]
+                )
+                st.session_state.finish_message = (
+                    result["message"]
+                )
+                st.rerun()
+
+            except RuntimeError as exc:
+                st.error(str(exc))
