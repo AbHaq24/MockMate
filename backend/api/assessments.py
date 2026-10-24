@@ -2,10 +2,12 @@
 from hashlib import sha256
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from backend.api.auth import get_current_user
 from backend.api.schemas import (
@@ -24,6 +26,11 @@ from backend.db.models import (
 )
 from backend.db.session import get_db
 from backend.llm import evaluate_answer, generate_question
+from backend.config.settings import get_settings
+
+from backend.limiter import limiter
+
+settings = get_settings()
 
 
 router = APIRouter(prefix="/assessments", tags=["Assessments"])
@@ -163,7 +170,9 @@ def create_assessment(
 
 
 @router.post("/{assessment_id}/questions")
+@limiter.limit("5/minute")
 def generate_assessment_question(
+    request: Request,
     assessment_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -221,10 +230,10 @@ def generate_assessment_question(
     }
 
 
-@router.post(
-    "/{assessment_id}/questions/{display_number}/regenerate"
-)
+@router.post("/{assessment_id}/questions/{display_number}/regenerate")
+@limiter.limit("5/minute")
 def regenerate_assessment_question(
+    request: Request,
     assessment_id: int,
     display_number: int,
     current_user: User = Depends(get_current_user),
@@ -321,7 +330,9 @@ def regenerate_assessment_question(
     "/{assessment_id}/questions/{assessment_question_id}/answer",
     response_model=EvaluationResponse,
 )
+@limiter.limit("3/minute")
 def submit_answer(
+    request: Request,
     assessment_id: int,
     assessment_question_id: int,
     data: AnswerSubmit,
@@ -355,7 +366,6 @@ def submit_answer(
             detail="Assessment is not active.",
         )
 
-    # Only one answer is allowed for the entire assessment.
     submitted_answer = db.scalar(
         select(Answer.id)
         .join(
@@ -422,8 +432,6 @@ def submit_answer(
         )
 
         db.add(evaluation)
-
-        # Submitting the first answer completes the assessment.
         assessment.status = "completed"
 
         db.commit()
@@ -448,7 +456,9 @@ def submit_answer(
 
 
 @router.post("/{assessment_id}/finish")
+@limiter.limit("3/minute")
 def finish_assessment(
+    request: Request,
     assessment_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
