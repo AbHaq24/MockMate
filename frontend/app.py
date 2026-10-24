@@ -24,16 +24,16 @@ st.set_page_config(
 
 
 # --------------------------------------------------
-
-
 # Styling
 # --------------------------------------------------
 
 st.markdown(
     """
     <style>
+    /* Page */
     .stApp {
         background-color: #f7f5f0;
+        color: #222222;
     }
 
     .block-container {
@@ -42,47 +42,124 @@ st.markdown(
         padding-bottom: 50px;
     }
 
+    /* App title */
     .mockmate-title {
         text-align: center;
         font-size: 44px;
         font-weight: 700;
-        color: #222222;
+        color: #222222 !important;
     }
 
     .mockmate-tagline {
         text-align: center;
-        color: #222222 !important;
+        color: #444444 !important;
         margin-bottom: 30px;
     }
 
-    /* Keep form labels readable */
+    /* General text and headings */
+    .stApp p,
+    .stApp li,
+    .stApp label,
+    .stMarkdown,
+    .stMarkdown p,
+    .stMarkdown strong,
+    [data-testid="stCaptionContainer"] p,
     [data-testid="stWidgetLabel"] p,
     [data-testid="stWidgetLabel"] label,
     [data-testid="stWidgetLabel"] span {
         color: #222222 !important;
         -webkit-text-fill-color: #222222 !important;
-        opacity: 1 !important;
     }
 
-    /* Buttons */
-    div[data-testid="stButton"] button {
+    h1, h2, h3, h4, h5, h6 {
+        color: #222222 !important;
+    }
+
+    /* Primary buttons: dark background, white text */
+    .stButton button,
+    [data-testid="stFormSubmitButton"] button {
+        background-color: #20232b !important;
+        color: #ffffff !important;
+        border: 1px solid #20232b !important;
         border-radius: 10px;
         min-height: 42px;
     }
 
-    /* Card styling */
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: #ffffff;
-        border-radius: 14px;
+    .stButton button p,
+    .stButton button span,
+    [data-testid="stFormSubmitButton"] button p,
+    [data-testid="stFormSubmitButton"] button span {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
     }
 
-    /* Keep Login and Create account visible */
+    .stButton button:hover,
+    [data-testid="stFormSubmitButton"] button:hover {
+        background-color: #3b4252 !important;
+        border-color: #3b4252 !important;
+    }
+
+    /* Text inputs and answer area */
+    .stTextInput input,
+    .stTextArea textarea {
+        background-color: #ffffff !important;
+        color: #222222 !important;
+        -webkit-text-fill-color: #222222 !important;
+        border: 1px solid #a8a8a8 !important;
+        border-radius: 8px;
+    }
+
+    .stTextInput input::placeholder,
+    .stTextArea textarea::placeholder {
+        color: #666666 !important;
+        -webkit-text-fill-color: #666666 !important;
+        opacity: 1 !important;
+    }
+
+    /* Login / Create account selector */
     div[role="radiogroup"] label,
     div[role="radiogroup"] label p,
     div[role="radiogroup"] label span {
-        color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
-     opacity: 1 !important;
+        color: #222222 !important;
+        -webkit-text-fill-color: #222222 !important;
+        opacity: 1 !important;
+    }
+
+    /* Cards */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background-color: #ffffff;
+        border: 1px solid #dedbd4;
+        border-radius: 14px;
+    }
+
+    /* Progress bar */
+    [data-testid="stProgress"] > div {
+        background-color: #dedbd4;
+    }
+
+    [data-testid="stProgress"] [data-testid="stProgressBar"] {
+        background-color: #2563eb;
+    }
+
+    /* Success, error and warning messages */
+    [data-testid="stAlert"] p {
+        color: #222222 !important;
+    }
+
+
+    /* Generated question card: force readable dark text */
+    div[data-testid="stVerticalBlockBorderWrapper"] .stMarkdown,
+    div[data-testid="stVerticalBlockBorderWrapper"] .stMarkdown p,
+    div[data-testid="stVerticalBlockBorderWrapper"] .stMarkdown strong,
+    div[data-testid="stVerticalBlockBorderWrapper"] .stMarkdown li {
+     color: #222222 !important;
+     -webkit-text-fill-color: #222222 !important;
+}
+
+/* Ensure the question container has a white background */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+     background-color: #ffffff !important;
+     color: #222222 !important;
 }
     </style>
     """,
@@ -202,6 +279,9 @@ def reset_assessment():
 # --------------------------------------------------
 # Authentication
 # --------------------------------------------------
+if st.session_state.get("switch_to_login", False):
+    st.session_state.auth_mode = "Login"
+    st.session_state.switch_to_login = False
 
 if not st.session_state.token:
     auth_mode = st.radio(
@@ -281,8 +361,9 @@ if not st.session_state.token:
                         },
                     )
 
+                    st.session_state.switch_to_login = True
                     st.success("Account created. Please log in.")
-                    st.session_state.auth_mode = "Login"
+                    st.rerun()
 
                 except RuntimeError as exc:
                     st.error(str(exc))
