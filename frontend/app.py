@@ -429,7 +429,10 @@ if not st.session_state.token:
 st.caption(f"Logged in as {st.session_state.email}")
 
 if st.button("Logout"):
-    cookie_manager.delete("mockmate_token")
+    try:
+        cookie_manager.delete("mockmate_token")
+    except KeyError:
+        pass
 
     st.session_state.token = None
     st.session_state.email = ""
