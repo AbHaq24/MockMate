@@ -1,5 +1,5 @@
-
 streamlit>=1.45,<2
+extra-streamlit-components>=0.1.70,<1
 openai>=1.75,<3
 python-dotenv>=1.0,<2
 
@@ -17,6 +17,10 @@ alembic>=1.15,<2
 pwdlib[argon2]>=0.2,<1
 PyJWT[crypto]>=2.10,<3
 email-validator>=2.2,<3
+
+# Machine Learning and Retrieval
+scikit-learn>=1.4,<2
+numpy>=1.24,<3
 
 # Testing
 httpx>=0.28,<1

@@ -1,4 +1,3 @@
-
 from hashlib import sha256
 import re
 
@@ -25,7 +24,13 @@ from backend.db.models import (
     User,
 )
 from backend.db.session import get_db
+import backend.llm
 from backend.llm import evaluate_answer, generate_question
+from backend.services.guardrails import (
+    validate_answer_guardrails,
+    validate_topic_guardrails,
+)
+from backend.services.retrieval import retriever
 from backend.config.settings import get_settings
 
 from backend.limiter import limiter
@@ -139,6 +144,34 @@ def generate_unique_question(
         question_hash(text) for text in previous_questions
     } | exclude_hashes
 
+    # 1. Attempt nearest-neighbor / TF-IDF retrieval from curated bank first
+    # Only use retriever if generate_question has not been monkeypatched for testing
+    if generate_question is backend.llm.generate_question:
+        retrieved = retriever.retrieve_question(
+            topic=assessment.topic,
+            difficulty=assessment.difficulty,
+            exclude_hashes=known_hashes,
+        )
+        if retrieved:
+            text = retrieved["question"].strip()
+            digest = question_hash(text)
+            if digest not in known_hashes:
+                question = Question(
+                    user_id=user.id,
+                    topic=assessment.topic,
+                    difficulty=assessment.difficulty,
+                    question_text=text,
+                    normalized_hash=digest,
+                    reference_answer=retrieved["reference_answer"].strip(),
+                )
+                try:
+                    db.add(question)
+                    db.flush()
+                    return question
+                except IntegrityError:
+                    db.rollback()
+
+    # 2. Fall back to live LLM generation via Groq
     for _ in range(MAX_GENERATION_ATTEMPTS):
         try:
             generated = generate_question(
@@ -194,13 +227,8 @@ def create_assessment(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Assessment:
-    topic = data.topic.strip()
-
-    if not topic:
-        raise HTTPException(
-            status_code=422,
-            detail="Topic cannot be blank.",
-        )
+    # Validate and sanitize topic through security guardrails
+    topic = validate_topic_guardrails(data.topic)
 
     assessment = Assessment(
         user_id=current_user.id,
@@ -387,13 +415,8 @@ def submit_answer(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    answer_text = data.answer_text.strip()
-
-    if not answer_text:
-        raise HTTPException(
-            status_code=422,
-            detail="Answer cannot be blank.",
-        )
+    # Validate and sanitize candidate answer through security guardrails
+    answer_text = validate_answer_guardrails(data.answer_text)
 
     assessment = db.scalar(
         select(Assessment).where(

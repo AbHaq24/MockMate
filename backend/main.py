@@ -1,8 +1,8 @@
-
 import logging
 import time
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 from backend.limiter import limiter
@@ -32,12 +32,18 @@ app.add_exception_handler(
     _rate_limit_exceeded_handler,
 )
 
-app.include_router(auth_router)
-app.include_router(assessments_router)
+# Environment-configured CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origin_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.middleware("http")
-async def log_requests(request: Request, call_next):
+async def security_and_timing_headers(request: Request, call_next):
     start_time = time.perf_counter()
 
     try:
@@ -62,8 +68,20 @@ async def log_requests(request: Request, call_next):
         duration_ms,
     )
 
+    # Diagnostic timing header
     response.headers["X-Process-Time-Ms"] = f"{duration_ms:.2f}"
+
+    # Standard security headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
     return response
+
+
+app.include_router(auth_router)
+app.include_router(assessments_router)
 
 
 @app.get("/health")
