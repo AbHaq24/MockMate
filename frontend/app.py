@@ -1,9 +1,9 @@
 
 import os
-
+import datetime
 import httpx
 import streamlit as st
-
+import extra_streamlit_components as stx
 
 # --------------------------------------------------
 # Configuration
@@ -21,6 +21,8 @@ st.set_page_config(
     page_icon="🎯",
     layout="centered",
 )
+
+cookie_manager = stx.CookieManager(key="mockmate_cookies")
 
 
 # --------------------------------------------------
@@ -146,6 +148,16 @@ st.markdown(
         color: #222222 !important;
     }
 
+    /* Fix inline code formatting in generated questions */
+    .stMarkdown code {
+       color: #222222 !important;
+       -webkit-text-fill-color: #222222 !important;
+      background-color: #eeeae2 !important;
+      border: 1px solid #dedbd4 !important;
+      border-radius: 5px;
+      padding: 2px 5px;
+      font-size: 0.9em;
+    }
 
     /* Generated question card: force readable dark text */
     div[data-testid="stVerticalBlockBorderWrapper"] .stMarkdown,
@@ -200,9 +212,11 @@ for key, value in DEFAULTS.items():
         st.session_state[key] = value
 
 
+
 # --------------------------------------------------
 # API helper
 # --------------------------------------------------
+
 
 def api_request(method, path, payload=None):
     headers = {}
@@ -231,7 +245,17 @@ def api_request(method, path, payload=None):
     except ValueError:
         data = {}
 
+    # Handle API errors, including expired authentication tokens
     if not response.is_success:
+        if (
+            response.status_code == 401
+            and path != "/auth/login"
+        ):
+            st.session_state.token = None
+            st.session_state.email = ""
+            reset_assessment()
+            st.rerun()
+
         detail = data.get("detail", response.text)
 
         if isinstance(detail, list):
@@ -246,8 +270,21 @@ def api_request(method, path, payload=None):
             f"API error ({response.status_code}): {detail}"
         )
 
+    # Return successful responses, including HTTP 201
     return data
 
+saved_token = cookie_manager.get("mockmate_token")
+
+if not st.session_state.token and saved_token:
+    st.session_state.token = saved_token
+
+    try:
+        user = api_request("GET", "/auth/me")
+        st.session_state.email = user.get("email", "")
+    except RuntimeError:
+        cookie_manager.delete("mockmate_token")
+        st.session_state.token = None
+        st.session_state.email = ""
 
 # --------------------------------------------------
 # Assessment helpers
@@ -318,6 +355,21 @@ if not st.session_state.token:
 
                 st.session_state.token = result["access_token"]
                 st.session_state.email = login_email.strip()
+
+
+                cookie_manager.set(
+                    "mockmate_token",
+                     result["access_token"],
+                     expires_at=datetime.datetime.now()
+                      + datetime.timedelta(days=1),
+                )
+
+
+
+
+
+
+
                 reset_assessment()
                 st.rerun()
 
@@ -377,9 +429,93 @@ if not st.session_state.token:
 st.caption(f"Logged in as {st.session_state.email}")
 
 if st.button("Logout"):
-    for key in DEFAULTS:
-        st.session_state[key] = DEFAULTS[key]
+    cookie_manager.delete("mockmate_token")
+
+    st.session_state.token = None
+    st.session_state.email = ""
+
+    reset_assessment()
     st.rerun()
+
+
+
+# --------------------------------------------------
+# Assessment History
+# --------------------------------------------------
+
+st.divider()
+st.subheader("Assessment History")
+
+if st.button("Refresh History"):
+    st.rerun()
+
+
+try:
+    history = api_request("GET", "/assessments")
+
+    # Performance Dashboard
+    completed_scores = [
+        item["score"]
+        for item in history
+        if item["status"] == "completed"
+        and item.get("score") is not None
+    ]
+
+    total_completed = len(completed_scores)
+    average_score = (
+        sum(completed_scores) / total_completed
+        if total_completed
+        else 0
+    )
+    best_score = (
+        max(completed_scores)
+        if completed_scores
+        else 0
+    )
+
+    st.subheader("Performance Dashboard")
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("Evaluated Assessments", total_completed)
+    col2.metric("Average Score", f"{average_score:.1f}/100")
+    col3.metric("Best Score", f"{best_score}/100")
+
+    st.divider()
+    st.subheader("Previous Assessments")
+
+    if not history:
+        st.info("No previous assessments found.")
+    else:
+        for item in history:
+            score = item.get("score")
+            score_text = (
+                f"{score}/100"
+                if score is not None
+                else "Not evaluated"
+            )
+
+            with st.expander(
+                f"Assessment #{item['assessment_id']} — "
+                f"{item['topic']} — {score_text}"
+            ):
+                st.write(f"**Difficulty:** {item['difficulty']}")
+                st.write(f"**Status:** {item['status']}")
+
+                if item.get("feedback"):
+                    st.write("**Feedback**")
+                    st.write(item["feedback"])
+
+                if item.get("strengths"):
+                    st.write("**Strengths**")
+                    st.write(item["strengths"])
+
+                if item.get("improvements"):
+                    st.write("**Areas to improve**")
+                    st.write(item["improvements"])
+
+except RuntimeError as exc:
+    st.error(f"Could not load assessment history: {exc}")
 
 
 # --------------------------------------------------

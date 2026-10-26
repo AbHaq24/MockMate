@@ -35,6 +35,54 @@ settings = get_settings()
 
 router = APIRouter(prefix="/assessments", tags=["Assessments"])
 
+
+@router.get("")
+def get_assessment_history(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    assessments = db.scalars(
+        select(Assessment)
+        .where(Assessment.user_id == current_user.id)
+        .order_by(Assessment.id.desc())
+    ).all()
+
+    history = []
+
+    for assessment in assessments:
+        answer = db.scalar(
+            select(Answer)
+            .join(
+                AssessmentQuestion,
+                Answer.assessment_question_id == AssessmentQuestion.id,
+            )
+            .where(AssessmentQuestion.assessment_id == assessment.id)
+        )
+
+        evaluation = (
+            db.scalar(
+                select(Evaluation).where(Evaluation.answer_id == answer.id)
+            )
+            if answer
+            else None
+        )
+
+        history.append(
+            {
+                "assessment_id": assessment.id,
+                "topic": assessment.topic,
+                "difficulty": assessment.difficulty,
+                "status": assessment.status,
+                "score": evaluation.score if evaluation else None,
+                "feedback": evaluation.feedback if evaluation else None,
+                "strengths": evaluation.strengths if evaluation else None,
+                "improvements": evaluation.improvements if evaluation else None,
+            }
+        )
+
+    return history
+
+
 MAX_QUESTIONS = 3
 MAX_VERSIONS = 3
 MAX_GENERATION_ATTEMPTS = 3
