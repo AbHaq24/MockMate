@@ -264,6 +264,66 @@ CURATED_QUESTION_BANK: list[CuratedQuestion] = [
 ]
 
 
+def is_topic_compatible(bank_topic: str, requested_topic: str) -> bool:
+    """Determine whether a curated question bank topic matches a user's requested topic."""
+    b = bank_topic.strip().lower()
+    r = requested_topic.strip().lower()
+
+    if b == r:
+        return True
+
+    domains = {
+        "sql": [
+            "sql", "database", "databases", "postgres", "postgresql",
+            "mysql", "sqlite", "rdbms", "relational", "query", "queries"
+        ],
+        "python": [
+            "python", "python3", "programming", "scripting", "oop"
+        ],
+        "machine learning": [
+            "machine learning", "ml", "statistical learning", "supervised",
+            "unsupervised", "clustering", "regression", "classification"
+        ],
+        "deep learning & genai": [
+            "deep learning", "genai", "generative ai", "neural",
+            "transformer", "transformers", "llm", "rag", "lora", "attention"
+        ],
+        "statistics": [
+            "statistics", "probability", "stats", "hypothesis testing",
+            "p-value", "inferential"
+        ],
+    }
+
+    # Ensure pure SQL requests never match ML, DL, Python, or Statistics
+    is_pure_sql_req = any(term in r for term in domains["sql"]) and not any(
+        term in r for term in domains["machine learning"] + domains["deep learning & genai"]
+    )
+    if is_pure_sql_req:
+        return b == "sql"
+
+    # Ensure pure Python requests never match SQL or Stats
+    is_pure_python_req = any(term in r for term in domains["python"]) and not any(
+        term in r for term in domains["sql"] + domains["machine learning"]
+    )
+    if is_pure_python_req:
+        return b == "python"
+
+    # General domain lookup
+    target_domain = None
+    for dom_name in domains:
+        if b == dom_name:
+            target_domain = dom_name
+            break
+
+    if target_domain and target_domain in domains:
+        keywords = domains[target_domain]
+        r_words = set(re.findall(r"\w+", r))
+        if any(kw in r for kw in keywords) or any(kw in r_words for kw in keywords):
+            return True
+
+    return False
+
+
 class QuestionRetriever:
     """TF-IDF and Cosine Similarity retrieval engine for interview questions."""
 
@@ -293,7 +353,8 @@ class QuestionRetriever:
         """Find the most relevant pre-generated question for topic and difficulty.
 
         Uses TF-IDF representation and cosine similarity. Can be biased toward
-        personalized candidate growth/weakness areas using focus_terms.
+        personalized candidate growth/weakness areas using focus_terms, strictly
+        filtered to topic-compatible candidates.
         """
         from backend.api.assessments import question_hash
 
@@ -301,11 +362,12 @@ class QuestionRetriever:
         clean_topic = topic.strip().lower()
         clean_difficulty = difficulty.strip().capitalize()
 
-        # 1. Filter candidates by matching difficulty
+        # 1. Filter candidates by matching difficulty AND topic compatibility
         matching_indices = [
             idx
             for idx, q in enumerate(self.question_bank)
             if q.difficulty.lower() == clean_difficulty.lower()
+            and is_topic_compatible(q.topic, clean_topic)
         ]
 
         if not matching_indices or self._tfidf_matrix is None:

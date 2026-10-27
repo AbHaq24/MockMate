@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Any
+from typing import Any, Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,7 +9,6 @@ from backend.db.models import Answer, Assessment, AssessmentQuestion, Evaluation
 
 def get_user_analytics(user_id: int, db: Session) -> dict[str, Any]:
     """Calculate aggregated performance analytics, strengths, and weaknesses
-
     for an authenticated user.
     """
     # 1. Total completed assessments
@@ -147,15 +146,63 @@ def get_user_analytics(user_id: int, db: Session) -> dict[str, Any]:
     }
 
 
-def get_user_weak_areas(user_id: int, db: Session) -> list[str]:
+def get_user_weak_areas(
+    user_id: int, db: Session, current_topic: Optional[str] = None
+) -> list[str]:
     """Retrieve recurring weak areas and topics for adaptive personalization.
 
+    When current_topic is provided, only weaknesses and improvement areas pertaining
+    to that specific topic are returned, preventing cross-domain contamination.
     Returns an empty list if there is insufficient historical evaluation data.
     """
+    from backend.services.retrieval import is_topic_compatible
+
     analytics = get_user_analytics(user_id, db)
     if analytics["total_evaluated"] == 0:
         return []
 
+    # If current_topic is provided, only extract weaknesses belonging to this domain
+    if current_topic:
+        matching_topic_evaluations = [
+            tp
+            for tp in analytics["topic_performance"]
+            if is_topic_compatible(tp["topic"], current_topic)
+            and tp["average_score"] < 70
+        ]
+        if not matching_topic_evaluations:
+            # Candidate is doing fine or has no previous attempts in this topic
+            return []
+
+        weaknesses: list[str] = []
+        for tp in matching_topic_evaluations:
+            weaknesses.append(tp["topic"])
+
+        # Fetch evaluations specifically for this topic to extract relevant improvement areas
+        records = db.execute(
+            select(
+                Assessment.topic.label("topic"),
+                Evaluation.score.label("score"),
+                Evaluation.improvements.label("improvements"),
+            )
+            .join(AssessmentQuestion, AssessmentQuestion.assessment_id == Assessment.id)
+            .join(Answer, Answer.assessment_question_id == AssessmentQuestion.id)
+            .join(Evaluation, Evaluation.answer_id == Answer.id)
+            .where(
+                Assessment.user_id == user_id,
+                Evaluation.score < 70,
+            )
+            .order_by(Evaluation.created_at.desc())
+        ).all()
+
+        for r in records:
+            if is_topic_compatible(r.topic, current_topic) and r.improvements:
+                clean_imp = r.improvements.strip()
+                if clean_imp and clean_imp not in weaknesses and len(weaknesses) < 3:
+                    weaknesses.append(clean_imp)
+
+        return weaknesses[:3]
+
+    # Default fallback when current_topic is not provided
     weaknesses = []
     if analytics["weak_topics"]:
         weaknesses.extend(analytics["weak_topics"])

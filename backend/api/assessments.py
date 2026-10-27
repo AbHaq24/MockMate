@@ -32,6 +32,8 @@ from backend.llm import evaluate_answer, generate_question
 from backend.services.analytics import get_user_analytics, get_user_weak_areas
 from backend.services.guardrails import (
     validate_answer_guardrails,
+    validate_question_topic_consistency,
+    validate_reference_answer_completeness,
     validate_topic_guardrails,
 )
 from backend.services.retrieval import retriever
@@ -180,8 +182,8 @@ def generate_unique_question(
         question_hash(text) for text in previous_questions
     } | exclude_hashes
 
-    # Retrieve user growth/weakness areas for personalization
-    weak_areas = get_user_weak_areas(user.id, db)
+    # Retrieve user growth/weakness areas for personalization, scoped to current topic
+    weak_areas = get_user_weak_areas(user.id, db, current_topic=assessment.topic)
 
     # 1. Attempt nearest-neighbor / TF-IDF retrieval from curated bank first
     # Only use retriever if generate_question has not been monkeypatched for testing
@@ -194,15 +196,20 @@ def generate_unique_question(
         )
         if retrieved:
             text = retrieved["question"].strip()
+            ref = retrieved["reference_answer"].strip()
             digest = question_hash(text)
-            if digest not in known_hashes:
+
+            is_consistent, _ = validate_question_topic_consistency(assessment.topic, text)
+            is_complete, _ = validate_reference_answer_completeness(text, ref)
+
+            if is_consistent and is_complete and digest not in known_hashes:
                 question = Question(
                     user_id=user.id,
                     topic=assessment.topic,
                     difficulty=assessment.difficulty,
                     question_text=text,
                     normalized_hash=digest,
-                    reference_answer=retrieved["reference_answer"].strip(),
+                    reference_answer=ref,
                 )
                 try:
                     db.add(question)
@@ -233,9 +240,19 @@ def generate_unique_question(
             ) from exc
 
         text = generated["question"].strip()
+        ref = generated["reference_answer"].strip()
         digest = question_hash(text)
 
         if digest in known_hashes:
+            continue
+
+        # Reject questions that mix unrelated domains or have incomplete reference answers
+        is_consistent, _ = validate_question_topic_consistency(assessment.topic, text)
+        if not is_consistent:
+            continue
+
+        is_complete, _ = validate_reference_answer_completeness(text, ref)
+        if not is_complete:
             continue
 
         question = Question(
@@ -244,7 +261,7 @@ def generate_unique_question(
             difficulty=assessment.difficulty,
             question_text=text,
             normalized_hash=digest,
-            reference_answer=generated["reference_answer"].strip(),
+            reference_answer=ref,
         )
 
         try:
