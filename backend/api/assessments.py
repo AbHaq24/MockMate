@@ -1,4 +1,5 @@
 from hashlib import sha256
+import inspect
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -10,8 +11,10 @@ from slowapi.util import get_remote_address
 
 from backend.api.auth import get_current_user
 from backend.api.schemas import (
+    AnalyticsResponse,
     AnswerSubmit,
     AssessmentCreate,
+    AssessmentHistoryItem,
     AssessmentResponse,
     EvaluationResponse,
 )
@@ -26,6 +29,7 @@ from backend.db.models import (
 from backend.db.session import get_db
 import backend.llm
 from backend.llm import evaluate_answer, generate_question
+from backend.services.analytics import get_user_analytics, get_user_weak_areas
 from backend.services.guardrails import (
     validate_answer_guardrails,
     validate_topic_guardrails,
@@ -41,7 +45,7 @@ settings = get_settings()
 router = APIRouter(prefix="/assessments", tags=["Assessments"])
 
 
-@router.get("")
+@router.get("", response_model=list[AssessmentHistoryItem])
 def get_assessment_history(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -55,22 +59,35 @@ def get_assessment_history(
     history = []
 
     for assessment in assessments:
-        answer = db.scalar(
-            select(Answer)
+        # 1. Search for an AssessmentQuestion that has a submitted Answer
+        answered_aq = db.scalar(
+            select(AssessmentQuestion)
             .join(
-                AssessmentQuestion,
+                Answer,
                 Answer.assessment_question_id == AssessmentQuestion.id,
             )
             .where(AssessmentQuestion.assessment_id == assessment.id)
+            .order_by(
+                AssessmentQuestion.display_number.desc(),
+                AssessmentQuestion.version_number.desc(),
+            )
         )
 
-        evaluation = (
-            db.scalar(
-                select(Evaluation).where(Evaluation.answer_id == answer.id)
+        target_aq = answered_aq
+        if target_aq is None:
+            # 2. If no question was answered, fetch the latest displayed question
+            target_aq = db.scalar(
+                select(AssessmentQuestion)
+                .where(
+                    AssessmentQuestion.assessment_id == assessment.id,
+                    AssessmentQuestion.is_current.is_(True),
+                )
+                .order_by(AssessmentQuestion.display_number.desc())
             )
-            if answer
-            else None
-        )
+
+        question = db.get(Question, target_aq.question_id) if target_aq else None
+        answer = target_aq.answer if target_aq else None
+        evaluation = answer.evaluation if answer else None
 
         history.append(
             {
@@ -78,6 +95,13 @@ def get_assessment_history(
                 "topic": assessment.topic,
                 "difficulty": assessment.difficulty,
                 "status": assessment.status,
+                "created_at": assessment.created_at.isoformat() if assessment.created_at else None,
+                "questions_shown_count": assessment.questions_shown_count,
+                "display_number": target_aq.display_number if target_aq else None,
+                "version_number": target_aq.version_number if target_aq else None,
+                "question": question.question_text if question else None,
+                "reference_answer": question.reference_answer if question else None,
+                "answer": answer.answer_text if answer else None,
                 "score": evaluation.score if evaluation else None,
                 "feedback": evaluation.feedback if evaluation else None,
                 "strengths": evaluation.strengths if evaluation else None,
@@ -86,6 +110,18 @@ def get_assessment_history(
         )
 
     return history
+
+
+@router.get("/analytics", response_model=AnalyticsResponse)
+def get_user_performance_analytics(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Retrieve aggregated performance metrics, strengths, and weaknesses for
+
+    the current user.
+    """
+    return get_user_analytics(current_user.id, db)
 
 
 MAX_QUESTIONS = 3
@@ -144,6 +180,9 @@ def generate_unique_question(
         question_hash(text) for text in previous_questions
     } | exclude_hashes
 
+    # Retrieve user growth/weakness areas for personalization
+    weak_areas = get_user_weak_areas(user.id, db)
+
     # 1. Attempt nearest-neighbor / TF-IDF retrieval from curated bank first
     # Only use retriever if generate_question has not been monkeypatched for testing
     if generate_question is backend.llm.generate_question:
@@ -151,6 +190,7 @@ def generate_unique_question(
             topic=assessment.topic,
             difficulty=assessment.difficulty,
             exclude_hashes=known_hashes,
+            focus_terms=weak_areas if weak_areas else None,
         )
         if retrieved:
             text = retrieved["question"].strip()
@@ -172,12 +212,19 @@ def generate_unique_question(
                     db.rollback()
 
     # 2. Fall back to live LLM generation via Groq
+    kwargs = {}
+    if weak_areas:
+        sig = inspect.signature(generate_question)
+        if "focus_areas" in sig.parameters:
+            kwargs["focus_areas"] = weak_areas
+
     for _ in range(MAX_GENERATION_ATTEMPTS):
         try:
             generated = generate_question(
                 assessment.topic,
                 assessment.difficulty,
                 previous_questions=previous_questions,
+                **kwargs,
             )
         except RuntimeError as exc:
             raise HTTPException(

@@ -23,19 +23,29 @@ Return ONLY valid JSON in this exact format:
 """
 
 
-def question_user_prompt(topic, difficulty, previous_questions=None):
+def question_user_prompt(topic, difficulty, previous_questions=None, focus_areas=None):
     previous_questions = previous_questions or []
+    focus_areas = focus_areas or []
 
     previous = "\n".join(
         f"- {question}" for question in previous_questions
     ) or "None"
+
+    focus_instruction = ""
+    if focus_areas:
+        focus_lines = "\n".join(f"- {fa}" for fa in focus_areas)
+        focus_instruction = f"""
+Candidate's identified growth/weakness areas to personalize and target:
+{focus_lines}
+Focus the question on testing these concepts and practical applications.
+"""
 
     return f"""
 Generate one interview question and its reference answer.
 
 Selected topic: {topic}
 Selected difficulty: {difficulty}
-
+{focus_instruction}
 Previously generated questions to avoid:
 {previous}
 

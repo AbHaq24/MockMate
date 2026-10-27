@@ -48,11 +48,16 @@ def ask(prompt, system_prompt="You are a helpful AI assistant."):
     return content.strip()
 
 
-def generate_question(topic, difficulty, previous_questions=None):
+def generate_question(topic, difficulty, previous_questions=None, focus_areas=None):
     from backend.prompts import question_system_prompt, question_user_prompt
 
     raw_response = ask(
-        question_user_prompt(topic, difficulty, previous_questions),
+        question_user_prompt(
+            topic,
+            difficulty,
+            previous_questions=previous_questions,
+            focus_areas=focus_areas,
+        ),
         system_prompt=question_system_prompt(),
     )
 
@@ -74,7 +79,6 @@ def generate_question(topic, difficulty, previous_questions=None):
         "question": question.strip(),
         "reference_answer": reference_answer.strip(),
     }
-
 
 
 def evaluate_answer(topic, difficulty, question, reference_answer, answer):

@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -60,3 +60,43 @@ class EvaluationResponse(BaseModel):
     feedback: str
     strengths: str
     improvements: str
+
+
+class AssessmentHistoryItem(BaseModel):
+    assessment_id: int
+    topic: str
+    difficulty: str
+    status: str
+    created_at: Optional[str] = None
+    questions_shown_count: int = 0
+    display_number: Optional[int] = None
+    version_number: Optional[int] = None
+    question: Optional[str] = None
+    reference_answer: Optional[str] = None
+    answer: Optional[str] = None
+    score: Optional[int] = None
+    feedback: Optional[str] = None
+    strengths: Optional[str] = None
+    improvements: Optional[str] = None
+
+
+# -------------------------
+# Analytics schemas
+# -------------------------
+
+class TopicPerformance(BaseModel):
+    topic: str
+    attempts: int
+    average_score: float
+    best_score: int
+
+
+class AnalyticsResponse(BaseModel):
+    total_completed: int
+    total_evaluated: int
+    average_score: float
+    best_score: int
+    topic_performance: list[TopicPerformance]
+    strengths: list[str]
+    improvement_areas: list[str]
+    weak_topics: list[str]

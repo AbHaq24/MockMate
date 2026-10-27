@@ -288,12 +288,12 @@ class QuestionRetriever:
         difficulty: str,
         exclude_hashes: Optional[set[str]] = None,
         similarity_threshold: float = 0.20,
+        focus_terms: Optional[list[str]] = None,
     ) -> Optional[dict[str, str]]:
         """Find the most relevant pre-generated question for topic and difficulty.
 
-        Uses TF-IDF representation and cosine similarity. Returns None if no
-        question exceeds similarity_threshold or if all matching questions
-        are already in exclude_hashes.
+        Uses TF-IDF representation and cosine similarity. Can be biased toward
+        personalized candidate growth/weakness areas using focus_terms.
         """
         from backend.api.assessments import question_hash
 
@@ -311,8 +311,13 @@ class QuestionRetriever:
         if not matching_indices or self._tfidf_matrix is None:
             return None
 
-        # 2. Build query representation
-        query_text = f"{clean_topic} {clean_difficulty}"
+        # 2. Build query representation with optional focus terms
+        if focus_terms:
+            clean_focus = " ".join(f.strip().lower() for f in focus_terms if f.strip())
+            query_text = f"{clean_topic} {clean_focus} {clean_difficulty}"
+        else:
+            query_text = f"{clean_topic} {clean_difficulty}"
+
         try:
             query_vec = self.vectorizer.transform([query_text])
         except Exception:

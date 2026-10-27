@@ -1,7 +1,7 @@
-
 import os
 import datetime
 import httpx
+import pandas as pd
 import streamlit as st
 import extra_streamlit_components as stx
 
@@ -282,7 +282,10 @@ if not st.session_state.token and saved_token:
         user = api_request("GET", "/auth/me")
         st.session_state.email = user.get("email", "")
     except RuntimeError:
-        cookie_manager.delete("mockmate_token")
+        try:
+            cookie_manager.delete("mockmate_token")
+        except KeyError:
+            pass
         st.session_state.token = None
         st.session_state.email = ""
 
@@ -364,12 +367,6 @@ if not st.session_state.token:
                       + datetime.timedelta(days=1),
                 )
 
-
-
-
-
-
-
                 reset_assessment()
                 st.rerun()
 
@@ -443,46 +440,69 @@ if st.button("Logout"):
 
 
 # --------------------------------------------------
-# Assessment History
+# Assessment History & Performance Analytics
 # --------------------------------------------------
 
 st.divider()
-st.subheader("Assessment History")
+st.subheader("Performance & Analytics")
 
-if st.button("Refresh History"):
+if st.button("Refresh Analytics & History"):
     st.rerun()
 
+analytics_data = None
 
 try:
+    analytics_data = api_request("GET", "/assessments/analytics")
     history = api_request("GET", "/assessments")
 
-    # Performance Dashboard
-    completed_scores = [
-        item["score"]
-        for item in history
-        if item["status"] == "completed"
-        and item.get("score") is not None
-    ]
+    total_evaluated = analytics_data.get("total_evaluated", 0)
+    average_score = analytics_data.get("average_score", 0.0)
+    best_score = analytics_data.get("best_score", 0)
 
-    total_completed = len(completed_scores)
-    average_score = (
-        sum(completed_scores) / total_completed
-        if total_completed
-        else 0
-    )
-    best_score = (
-        max(completed_scores)
-        if completed_scores
-        else 0
-    )
-
-    st.subheader("Performance Dashboard")
-
+    # 1. Summary Metrics
     col1, col2, col3 = st.columns(3)
-
-    col1.metric("Evaluated Assessments", total_completed)
+    col1.metric("Evaluated Assessments", total_evaluated)
     col2.metric("Average Score", f"{average_score:.1f}/100")
     col3.metric("Best Score", f"{best_score}/100")
+
+    if total_evaluated > 0:
+        # 2. Topic Performance Chart
+        topic_perf = analytics_data.get("topic_performance", [])
+        if topic_perf:
+            st.markdown("#### Topic Performance")
+            chart_df = pd.DataFrame(
+                [
+                    {"Topic": tp["topic"], "Average Score": tp["average_score"]}
+                    for tp in topic_perf
+                ]
+            ).set_index("Topic")
+            st.bar_chart(chart_df, y="Average Score")
+
+        # 3. Strengths and Areas to Improve
+        col_str, col_imp = st.columns(2)
+        with col_str:
+            st.markdown("#### 🌟 Key Strengths")
+            strengths = analytics_data.get("strengths", [])
+            if strengths:
+                for s in strengths:
+                    st.success(s)
+            else:
+                st.caption("Complete more high-scoring assessments to reveal strengths.")
+
+        with col_imp:
+            st.markdown("#### 🎯 Areas to Improve")
+            improvements = analytics_data.get("improvement_areas", [])
+            if improvements:
+                for imp in improvements:
+                    st.warning(imp)
+            else:
+                st.caption("Keep practicing across diverse topics to track growth areas.")
+    else:
+        st.info(
+            "👋 Welcome to MockMate! Complete your first practice assessment below "
+            "to unlock detailed performance analytics, topic mastery charts, "
+            "and personalized interview question recommendations."
+        )
 
     st.divider()
     st.subheader("Previous Assessments")
@@ -498,27 +518,44 @@ try:
                 else "Not evaluated"
             )
 
-            with st.expander(
+            expander_title = (
                 f"Assessment #{item['assessment_id']} — "
-                f"{item['topic']} — {score_text}"
-            ):
-                st.write(f"**Difficulty:** {item['difficulty']}")
-                st.write(f"**Status:** {item['status']}")
+                f"{item['topic']} ({item['difficulty']}) — {score_text}"
+            )
+
+            with st.expander(expander_title):
+                st.write(f"**Difficulty:** {item['difficulty']} · **Status:** {item['status']}")
+
+                if item.get("question"):
+                    st.markdown("**Interview Question:**")
+                    with st.container(border=True):
+                        st.markdown(item["question"])
+
+                if item.get("answer"):
+                    st.markdown("**Your Answer:**")
+                    st.info(item["answer"])
+
+                if item.get("reference_answer"):
+                    with st.expander("Show Reference Answer"):
+                        st.write(item["reference_answer"])
+
+                if item.get("score") is not None:
+                    st.metric("Evaluation Score", f"{item['score']}/100")
 
                 if item.get("feedback"):
-                    st.write("**Feedback**")
+                    st.markdown("**Overall Feedback:**")
                     st.write(item["feedback"])
 
                 if item.get("strengths"):
-                    st.write("**Strengths**")
+                    st.markdown("**Strengths:**")
                     st.write(item["strengths"])
 
                 if item.get("improvements"):
-                    st.write("**Areas to improve**")
+                    st.markdown("**Areas to Improve:**")
                     st.write(item["improvements"])
 
 except RuntimeError as exc:
-    st.error(f"Could not load assessment history: {exc}")
+    st.error(f"Could not load analytics or history: {exc}")
 
 
 # --------------------------------------------------
@@ -577,6 +614,11 @@ if st.session_state.assessment_status == "completed":
 
 if st.session_state.assessment_id is None:
     st.subheader("Prepare for your interview")
+
+    # If user has weak topics from analytics, offer personalized recommendation
+    if analytics_data and analytics_data.get("weak_topics"):
+        weak_str = ", ".join(analytics_data["weak_topics"])
+        st.caption(f"🎯 Recommended focus based on past practice: {weak_str}")
 
     with st.form("assessment_form"):
         topic = st.text_input(
