@@ -1,0 +1,29 @@
+# Version control
+.git
+.gitignore
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+
+# Python virtual environment & cache
+mockmate/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Test & tooling cache
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Logs & temporary files
+*.log
+*.tmp
+.DS_Store
