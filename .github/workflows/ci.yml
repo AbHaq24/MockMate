@@ -1,0 +1,65 @@
+name: CI
+
+"on":
+  push:
+    branches:
+      - main
+      - feature/**
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Run Pytest & Database Migrations
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: mockmate_ci
+          POSTGRES_PASSWORD: mockmate_ci_password
+          POSTGRES_DB: mockmate_ci_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      ENVIRONMENT: testing
+      DATABASE_URL: postgresql+psycopg://mockmate_ci:mockmate_ci_password@localhost:5432/mockmate_ci_db
+      GROQ_API_KEY: dummy_ci_groq_api_key_not_used_in_tests
+      GROQ_MODEL: openai/gpt-oss-120b
+      JWT_SECRET_KEY: ci_dummy_jwt_secret_key_mockmate_testing_only_32_chars
+      JWT_ALGORITHM: HS256
+      RATE_LIMIT_ENABLED: "false"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Alembic migrations against PostgreSQL
+        run: |
+          alembic upgrade head
+
+      - name: Run pytest suite
+        run: |
+          pytest -v --durations=10
